@@ -15,14 +15,13 @@ import shutil
 
 
 # get .env variables
-load_dotenv()
-DISCORD_BOT_TOKEN = os.getenv("DISCORD_BOT_TOKEN")
-ENDPOINT = os.getenv("ENDPOINT")
-PERIOD_IGNORE = os.getenv("PERIOD_IGNORE")
-CHANNEL_ID = os.getenv("CHANNEL_ID")
+DISCORD_BOT_TOKEN = os.environ.get("DISCORD_BOT_TOKEN")
+ENDPOINT = os.environ.get("ENDPOINT")
+PERIOD_IGNORE = os.environ.get("PERIOD_IGNORE")
+CHANNEL_ID = os.environ.get("CHANNEL_ID")
 intents = discord.Intents.all()
 bot = Bot(command_prefix=commands.when_mentioned_or("/"), intents=intents, help_command=None)
-
+import torch
 
 def upload_character(json_file, img, tavern=False):
     json_file = json_file if type(json_file) == str else json_file.decode('utf-8')
