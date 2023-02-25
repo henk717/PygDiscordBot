@@ -1,3 +1,8 @@
+"""
+pygmalion cog
+Peepy version
+
+"""
 import re
 import json
 import requests
@@ -8,28 +13,20 @@ from dotenv import load_dotenv
 import nltk
 from nltk.tokenize import word_tokenize
 nltk.download('punkt')
+import torch
+from transformers import AutoModelForCausalLM, AutoTokenizer
 
-# load environment variables
-load_dotenv()
-ENDPOINT = os.getenv("ENDPOINT")
-CHANNEL_ID = os.getenv("CHANNEL_ID")
 
-# Put the configuration settings in the api
-model_config = {
-    "max_context_length": 1488,
-    "max_length": 50,
-    "rep_pen": 1.03,
-    "rep_pen_range": 1024,
-    "rep_pen_slope": 0.9,
-    "temperature": 0.6,
-    "tfs": 0.9,
-    "top_p": 0.9,
-    "typical": 1,
-    "sampler_order": [6, 0, 1, 2, 3, 4, 5]
-}
-# Send a PUT request to modify the settings
-response = requests.put(f"{ENDPOINT}/config", json=model_config)
+# load the pre-trained model and tokenizer
+revision = "dev"
+device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+model = AutoModelForCausalLM.from_pretrained(
+    "PygmalionAI/pygmalion-6b", revision=revision, torch_dtype=torch.float16
+).to(device)
+tokenizer = AutoTokenizer.from_pretrained("PygmalionAI/pygmalion-6b")
 
+
+# define the chatbot class
 class Chatbot:
     def __init__(self, char_filename):
         # read character data from JSON file
@@ -52,37 +49,96 @@ class Chatbot:
         num_tokens = len(tokens)
         return num_tokens
 
-    def save_conversation(self, message, message_content, bot):
-        # add user message to conversation history
-        self.conversation_history += f'{message.author.name}: {message_content}\n'
 
-        # define the prompt
+    def generate_response(self, input_ids):
+        # create attention mask tensor
+        attention_mask = torch.ones_like(input_ids)
+
+        output = model.generate(
+        input_ids,
+        max_length=2048,
+        do_sample=True,
+        use_cache=True,
+        min_new_tokens=10,
+        temperature=1.0,
+        repetition_penalty=1.02,
+        top_p=0.9,
+        attention_mask=attention_mask,
+        pad_token_id=tokenizer.pad_token_id,
+        )
+        if output is not None:
+            generated_text = tokenizer.decode(output[0], skip_special_tokens=True)
+            return generated_text
+        else:
+            return "This is an empty message. Something went wrong. Please check your code!"
+
+    def parse_text(self, generated_text):
+        text_lines = [line.strip() for line in str(generated_text).split("\n")]
+        aurora_line = next((line for line in reversed(text_lines) if 'AuroraAI' in line), None)
+        if aurora_line is not None:
+            aurora_line = aurora_line.replace('AuroraAI:', '').strip()
+            for i in range(len(text_lines)):
+                text_lines[i] = text_lines[i].replace('AuroraAI:', '')
+        return aurora_line
+
+    def save_conversation(self, message, message_content, bot):
+        # add user response to conversation history
+        self.conversation_history += f'{message.author.name}: {message_content}\n'
+        print(f'self.conversation_history: {self.conversation_history}')
+
+        # format prompt
         prompt = {
             "prompt": self.character_info + '\n'.join(
                 self.conversation_history.split('\n')[-self.num_lines_to_keep:]) + f'{self.char_name}:',
         }
 
-        # get the number of tokens in the prompt
-        tokens = self.prompt_tokens(prompt)
-        print(tokens)
+        input_ids = tokenizer.encode(prompt["prompt"], return_tensors="pt").to(device)
+        results = self.generate_response(input_ids)
 
-        # send a post request to the API endpoint
-        response = requests.post(f"{ENDPOINT}/api/v1/generate", json=prompt)
+        text_lines  = [line.strip() for line in str(results).split("\n")]
+        print(text_lines)
+        bot_line = next((line for line in reversed(text_lines) if self.char_name in line), None)
+        if bot_line is not None:
+            bot_line = bot_line.replace(f'{self.char_name}:', '').strip()
+            for i in range(len(text_lines)):
+                text_lines[i] = text_lines[i].replace(f'{self.char_name}:', '')
 
-        # check if the request was successful
-        if response.status_code == 200:
-            # get the results from the response
-            results = response.json()['results']
-            text = results[0]['text']
-            # split the response to remove excess dialogue
-            parts = re.split(r'\n[a-zA-Z]', text)[:1]
-            response_text = parts[0][1:]
-            # add bot response to conversation history
-            self.conversation_history = self.conversation_history + f'{self.char_name}: {response_text}\n'
-        else:
-            print("endpoint issue")
+        response_text = bot_line
+        # response_text = ''.join(new_list)
+        # add bot response to conversation history
 
+        self.conversation_history += f'{self.char_name}: {response_text}\n'
         return response_text
+
+    async def batch_save_conversation(self, message):
+        # add user message to conversation history
+        self.conversation_history += f"{message}\n"
+        print(f'self.conversation_history: {self.conversation_history}')
+
+        # format prompt
+        prompt = {
+            "prompt": self.character_info + '\n'.join(
+                self.conversation_history.split('\n')[-self.num_lines_to_keep:]) + f'{self.char_name}:',
+        }
+
+        input_ids = tokenizer.encode(prompt["prompt"], return_tensors="pt").to(device)
+        results = self.generate_response(input_ids)
+
+        text_lines  = [line.strip() for line in str(results).split("\n")]
+        print(text_lines)
+        bot_line = next((line for line in reversed(text_lines) if self.char_name in line), None)
+        if bot_line is not None:
+            bot_line = bot_line.replace(f'{self.char_name}:', '').strip()
+            for i in range(len(text_lines)):
+                text_lines[i] = text_lines[i].replace(f'{self.char_name}:', '')
+
+        response_text = bot_line
+        # response_text = ''.join(new_list)
+        # add bot response to conversation history
+
+        self.conversation_history += f'{self.char_name}: {response_text}\n'
+        return response_text
+
 
 
 class ChatbotCog(commands.Cog, name="chatbot"):
@@ -95,6 +151,12 @@ class ChatbotCog(commands.Cog, name="chatbot"):
         # get response message from chatbot and return it
         response_message = self.chatbot.save_conversation(message, message_content, bot)
         return response_message
+
+    @commands.command(name="batch_chat")
+    async def batch_chat_command(self, channel, message_content) -> None:
+        # get response message from chatbot and return it
+        response = await self.chatbot.batch_save_conversation(message_content)
+        return response
 
 
 async def setup(bot):
