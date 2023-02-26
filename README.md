@@ -26,7 +26,7 @@ export DISCORD_BOT_TOKEN=""
 export PERIOD_IGNORE="False"
 export CHANNEL_ID=1078702396942095
 ```
-ctrl+x and save
+ctrl+x , y , ENTER to save
 
 then run this command
 ```shell
