@@ -40,7 +40,7 @@ class Chatbot:
 
         # initialize conversation history and character information
         self.conversation_history = f"<START>\n{self.char_name}: {self.char_greeting}\n"
-        self.character_info = f"{self.char_name}'s Persona: {self.char_persona}\nScenario: {self.world_scenario}\n"
+        self.character_info = f"{self.char_name}'s Persona: {self.char_persona}\nScenario: {self.world_scenario}\n{self.example_dialogue}\n"
         self.num_lines_to_keep = 20
 
     def prompt_tokens(self, prompt):
