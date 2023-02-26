@@ -28,7 +28,9 @@ export CHANNEL_ID=1078702396942095
 ```
 ctrl+x , y , ENTER to save
 
-then run this command
+![img](https://i.imgur.com/LhrQGPpl.png)
+
+then run these commands
 ```shell
 source ~/.bashrc
 pip install -r requirements.txt
