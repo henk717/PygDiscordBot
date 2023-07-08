@@ -5,6 +5,8 @@ Instead of the pygmalion / character card format it expects the char\_persona to
 
 The personality of ALsy has been bundled so people can reproduce the bot. models I ran in the past were GPT4-X-Alpaca, Airoboros and Chronos.
 
+Note: The hardcoded settings are far from optimal or best practise, I just quickly threw them in based on nothing but enjoying the fact its the number 7 and liked the result it caused.
+
 ## \----
 
 ## Project Description
