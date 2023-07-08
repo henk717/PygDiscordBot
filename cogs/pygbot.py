@@ -5,24 +5,7 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 import os
-
-# configuration settings for the api
-model_config = {
-    "use_story": False,
-    "use_authors_note": False,
-    "use_world_info": False,
-    "use_memory": False,
-    "max_context_length": 2400,
-    "max_length": 120,
-    "rep_pen": 1.02,
-    "rep_pen_range": 1024,
-    "rep_pen_slope": 0.9,
-    "temperature": 1.0,
-    "tfs": 0.9,
-    "top_p": 0.9,
-    "typical": 1,
-    "sampler_order": [6, 0, 1, 2, 3, 4, 5]
-}
+from cleantext import clean
 
 def embedder(msg):
     embed = discord.Embed(
@@ -36,23 +19,19 @@ class Chatbot:
     def __init__(self, char_filename, bot):
         self.prompt = None
         self.endpoint = bot.endpoint
-        # Send a PUT request to modify the settings
-        requests.put(f"{self.endpoint}/config", json=model_config)
+
         # read character data from JSON file
         with open(char_filename, "r", encoding="utf-8") as f:
             data = json.load(f)
             self.char_name = data["char_name"]
             self.char_persona = data["char_persona"]
-            self.char_greeting = data["char_greeting"]
-            self.world_scenario = data["world_scenario"]
-            self.example_dialogue = data["example_dialogue"]
 
         # initialize conversation history and character information
         self.convo_filename = None
         self.conversation_history = ""
-        self.character_info = f"{self.char_name}'s Persona: {self.char_persona}\nScenario: {self.world_scenario}\n{self.example_dialogue}\n"
+        self.character_info = f"### Instruction:\n{self.char_persona}\n### Response:\n"
 
-        self.num_lines_to_keep = 20
+        self.num_lines_to_keep = 7
 
     async def set_convo_filename(self, convo_filename):
         # set the conversation filename and load conversation history from file
@@ -60,11 +39,11 @@ class Chatbot:
         if not os.path.isfile(convo_filename):
             # create a new file if it does not exist
             with open(convo_filename, "w", encoding="utf-8") as f:
-                f.write("<START>\n")
+                f.write("")
         with open(convo_filename, "r", encoding="utf-8") as f:
             lines = f.readlines()
             num_lines = min(len(lines), self.num_lines_to_keep)
-            self.conversation_history = "<START>\n" + "".join(lines[-num_lines:])
+            self.conversation_history = "".join(lines[-num_lines:])
 
     async def save_conversation(self, message, message_content):
         self.conversation_history += f'{message.author.name}: {message_content}\n'
@@ -72,6 +51,14 @@ class Chatbot:
         self.prompt = {
             "prompt": self.character_info + '\n'.join(
                 self.conversation_history.split('\n')[-self.num_lines_to_keep:]) + f'{self.char_name}:',
+            "rep_pen": 1.2,
+            "max_length": 80,
+            "rep_pen_range": 2048,
+            "rep_pen_slope": 1.0,
+            "temperature": 0.7,
+            "tfs": 0.7,
+            "topa": 0.7,
+            "typical": 0.7,
         }
         # send a post request to the API endpoint
         response = requests.post(f"{self.endpoint}/api/v1/generate", json=self.prompt)
@@ -88,11 +75,13 @@ class Chatbot:
                     break
             new_list = [item.replace(self.char_name + ": ", '\n') for item in result]
             response_text = ''.join(new_list)
+            response_text_clean = clean(response_text, no_emoji=True)
+            message_content_clean = clean(message_content, no_emoji=True)
             # add bot response to conversation history
-            self.conversation_history = self.conversation_history + f'{self.char_name}: {response_text}\n'
+            self.conversation_history = self.conversation_history + f'{self.char_name}: {response_text_clean}\n'
             with open(self.convo_filename, "a", encoding="utf-8") as f:
-                f.write(f'{message.author.name}: {message_content}\n')
-                f.write(f'{self.char_name}: {response_text}\n')  # add a separator between
+                f.write(f'{message.author.name}: {message_content_clean}\n')
+                f.write(f'{self.char_name}: {response_text_clean}\n')  # add a separator between
 
             return response_text
 
